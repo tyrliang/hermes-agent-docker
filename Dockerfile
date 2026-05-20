@@ -12,11 +12,11 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg nano zsh zip \
     && ARCH="$(dpkg --print-architecture)" \
     && case "$ARCH" in \
-         amd64) MICRO_ARCH=amd64 ;; \
-         arm64) MICRO_ARCH=arm64 ;; \
+         amd64) MICRO_ASSET_SUFFIX=linux64 ;; \
+         arm64) MICRO_ASSET_SUFFIX=linux-arm64 ;; \
          *) echo "unsupported architecture for micro: $ARCH" >&2; exit 1 ;; \
        esac \
-    && curl -fsSL "https://github.com/zyedidia/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-linux-${MICRO_ARCH}.tar.gz" \
+    && curl -fsSL "https://github.com/zyedidia/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-${MICRO_ASSET_SUFFIX}.tar.gz" \
     | tar -xzf - -C /tmp \
     && mv "/tmp/micro-${MICRO_VERSION}/micro" /usr/local/bin/micro \
     && rm -rf "/tmp/micro-${MICRO_VERSION}" \
