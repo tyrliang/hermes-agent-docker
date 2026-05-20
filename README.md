@@ -5,6 +5,7 @@ Minimal Docker image packaging for [Hermes Agent](https://github.com/NousResearc
 ## Image contents
 
 The image in this repo:
+
 - installs Hermes with the official upstream install script
 - includes `mini-swe-agent`
 - persists Hermes state under `/home/agent/.hermes`
@@ -33,13 +34,14 @@ docker build \
 ### Run Hermes
 
 Mount two paths:
+
 - your current project into `/home/agent/workspace`
 - a persistent Hermes home directory into `/home/agent/.hermes`
 
 ```bash
 docker run --rm -it \
-  -v "$PWD:/home/agent/workspace" \
-  -v "$HOME/.hermes:/home/agent/.hermes" \
+  -v "./tmp/workspace:/home/agent/workspace" \
+  -v "./tmp/.hermes:/home/agent/.hermes" \
   hermes-agent-docker:local \
   hermes
 ```
@@ -48,7 +50,7 @@ docker run --rm -it \
 
 ```bash
 docker run --rm \
-  -v "$HOME/.hermes:/home/agent/.hermes" \
+  -v "./tmp/.hermes:/home/agent/.hermes" \
   hermes-agent-docker:local \
   hermes doctor
 ```
@@ -64,3 +66,4 @@ If you do not mount `/home/agent/.hermes`, Hermes will still start, but its stat
 ## Environment and setup
 
 Run `hermes setup` inside the container and persist `/home/agent/.hermes`, or place the expected config files inside that mounted directory.
+
