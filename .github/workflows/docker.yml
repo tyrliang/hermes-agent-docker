@@ -1,5 +1,8 @@
 name: docker
 
+# GHCR publishes on push to main (latest + sha-*) and on pushed git tags matching v*.
+# Cutting a semver tag: README "Publishing" and scripts/tag-release.sh
+
 on:
   push:
     branches:

@@ -95,9 +95,37 @@ Run **`hermes setup`** inside the container once you have the mount (or populate
 
 ## Publishing (this fork)
 
-GitHub Actions (**.github/workflows/docker.yml**) builds **linux/amd64** and **linux/arm64** and pushes to **GHCR** when merging to **`main`** or tagging **`v*`**; **`latest`** tracks the default branch. PRs build without push. Manual runs can override **`HERMES_REF`**.
+GitHub Actions (**.github/workflows/docker.yml**) builds **linux/amd64** and **linux/arm64** and pushes to **GHCR** when:
 
-Typical tags: **`ghcr.io/<owner>/hermes-agent-docker:latest`**, **`…:sha-<short>`**, branch and semver tags.
+- **`main`** is pushed (**`latest`**, **`main`**, **`sha-<short>`**), or
+- a **git tag** matching **`v*`** is pushed (the registry gets an image tagged **exactly that string**, e.g. **`…:v0.6.2`**),
+
+PRs build without push (no GHCR publish). Manual **workflow_dispatch** runs can override **`HERMES_REF`**.
+
+### Cutting a release (version tag → same GHCR tag)
+
+[`docker/metadata-action`](https://github.com/docker/metadata-action) maps **`type=ref,event=tag`**, so the **Docker tag** mirrors the **git tag**:
+
+1. Commit what you want on **`main`** (or the branch that will receive the tag).
+2. Create and push a **[SemVer-style](https://semver.org/)** annotated tag prefixed with **`v`**:
+
+   ```bash
+   scripts/tag-release.sh 1.2.3          # prints "Next: git push origin v1.2.3"
+   git push origin v1.2.3
+   ```
+
+   Or by hand:
+
+   ```bash
+   git tag -a v1.2.3 -m "release v1.2.3"
+   git push origin v1.2.3
+   ```
+
+   Creating a **GitHub Release** with the same **`v*`** tag triggers the same **push tag** workflow.
+
+3. Pull **`ghcr.io/<owner>/<repo>:v1.2.3`** after the job finishes.
+
+**Tip:** Bump **`Dockerfile`** pins (`HERMES_REF`, **`CODEX_VERSION`**, **`MICRO_VERSION`**) before tagging when you intend that release line to freeze those bumps for consumers.
 
 ## Related layout
 
