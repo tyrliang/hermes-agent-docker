@@ -95,37 +95,31 @@ Run **`hermes setup`** inside the container once you have the mount (or populate
 
 ## Publishing (this fork)
 
-GitHub Actions (**.github/workflows/docker.yml**) builds **linux/amd64** and **linux/arm64** and pushes to **GHCR** when:
+GitHub Actions (**.github/workflows/docker.yml**) builds **linux/amd64** and **linux/arm64** and pushes to **GHCR** on every push to **`main`** or **workflow_dispatch**. Pull requests build only (no GHCR publish).
 
-- **`main`** is pushed (**`latest`**, **`main`**, **`sha-<short>`**), or
-- a **git tag** matching **`v*`** is pushed (the registry gets an image tagged **exactly that string**, e.g. **`…:v0.6.2`**),
+Each publish gets:
 
-PRs build without push (no GHCR publish). Manual **workflow_dispatch** runs can override **`HERMES_REF`**.
+- **`ghcr.io/<owner>/<repo>:latest`** plus branch / SHA tags from [`docker/metadata-action`](https://github.com/docker/metadata-action), and  
+- **`ghcr.io/<owner>/<repo>:vX.Y.Z`** where **`vX.Y.Z`** is **`v`** plus the semver in the repo-root **`VERSION`** file (first non-empty, non-comment line; optional leading **`v`** in the file is accepted).
 
-### Cutting a release (version tag → same GHCR tag)
+Manual **workflow_dispatch** can override **`HERMES_REF`** (Hermes upstream ref for **`Dockerfile`**) independently of **`VERSION`**.
 
-[`docker/metadata-action`](https://github.com/docker/metadata-action) maps **`type=ref,event=tag`**, so the **Docker tag** mirrors the **git tag**:
+### Bumping what consumers pull (`VERSION`)
 
-1. Commit what you want on **`main`** (or the branch that will receive the tag).
-2. Create and push a **[SemVer-style](https://semver.org/)** annotated tag prefixed with **`v`**:
+Treat **`VERSION`** as the semver line you mean for pinning images (immutable only if each release bumps it — see below).
 
-   ```bash
-   scripts/tag-release.sh 1.2.3          # prints "Next: git push origin v1.2.3"
-   git push origin v1.2.3
-   ```
+```bash
+# optional helper (writes VERSION; commit + push yourself)
+scripts/set-version.sh 0.0.5
+git add VERSION && git commit -m "chore: release v0.0.5"
+git push origin main
+```
 
-   Or by hand:
+After CI: **`docker pull ghcr.io/<owner>/<repo>:v0.0.5`**.
 
-   ```bash
-   git tag -a v1.2.3 -m "release v1.2.3"
-   git push origin v1.2.3
-   ```
+Because **`VERSION` is a moving tag**, each push rebuilds **`vX.Y.Z`**. Bump **`VERSION`** whenever you intend a distinct release artifact; **`sha-<short>`** remains the deterministic digest choice for lockfiles.
 
-   Creating a **GitHub Release** with the same **`v*`** tag triggers the same **push tag** workflow.
-
-3. Pull **`ghcr.io/<owner>/<repo>:v1.2.3`** after the job finishes.
-
-**Tip:** Bump **`Dockerfile`** pins (`HERMES_REF`, **`CODEX_VERSION`**, **`MICRO_VERSION`**) before tagging when you intend that release line to freeze those bumps for consumers.
+**Tip:** Bump **`Dockerfile`** pins (`HERMES_REF`, **`CODEX_VERSION`**, **`MICRO_VERSION`**) alongside **`VERSION`** when you want that release line to encode specific upstream / tool versions.
 
 ## Related layout
 

@@ -1,14 +1,12 @@
 name: docker
 
-# GHCR publishes on push to main (latest + sha-*) and on pushed git tags matching v*.
-# Cutting a semver tag: README "Publishing" and scripts/tag-release.sh
+# GHCR semver image tag is v$(cat VERSION) on each non-PR publish (main branch / workflow_dispatch).
+# Also publishes latest, branch ref, sha. Bump VERSION + push main — see README and scripts/set-version.sh
 
 on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
   pull_request:
   workflow_dispatch:
     inputs:
@@ -34,6 +32,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Read VERSION file
+        id: version
+        run: |
+          set -euo pipefail
+          test -f VERSION || { echo '::error title=VERSION::VERSION missing in repo root'; exit 1; }
+          line=$(grep -Ev '^\s*(#|$)' VERSION | head -1 | tr -d ' \t\r\n')
+          [ -n "$line" ] || { echo '::error title=VERSION::VERSION must contain semver (first non-comment line)'; exit 1; }
+          line="${line#v}"
+          case "$line" in
+            *.*.*) ;;
+            *) echo "::error title=VERSION::$line is not semver major.minor.patch" >&2; exit 1 ;;
+          esac
+          echo "semver=$line" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
@@ -55,10 +67,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=tag
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ inputs.hermes_ref }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.hermes_ref != '' }}
+            type=raw,value=v${{ steps.version.outputs.semver }},enable=${{ github.event_name != 'pull_request' }}
 
       - name: Build and push image
         uses: docker/build-push-action@v7
