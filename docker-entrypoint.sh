@@ -20,7 +20,8 @@ fi
 
 # Optional mount-local bootstrap (default: $HERMES_HOME/bootload/bootload.sh).
 BOOTLOAD_SCRIPT=${HERMES_BOOTLOAD_SCRIPT:-"$HERMES_HOME/bootload/bootload.sh"}
-if [ -x "$BOOTLOAD_SCRIPT" ]; then
+if [ -f "$BOOTLOAD_SCRIPT" ]; then
+  chmod +x "$BOOTLOAD_SCRIPT" || true
   exec "$BOOTLOAD_SCRIPT" "$@"
 fi
 

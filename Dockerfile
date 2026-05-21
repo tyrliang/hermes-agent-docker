@@ -60,6 +60,6 @@ RUN mkdir -p /usr/local/share/hermes-home \
     && chsh -s /bin/zsh agent
 
 USER agent
-WORKDIR /home/agent/workspace
+WORKDIR /home/agent/.hermes/workspace
 VOLUME ["/home/agent/.hermes"]
 ENTRYPOINT ["/usr/local/bin/hermes-entrypoint"]
