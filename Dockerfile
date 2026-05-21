@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1.7
-FROM docker/sandbox-templates:shell
+# Pin base by digest so an upstream tag bump doesn't silently invalidate the entire cache. Bump deliberately.
+FROM docker/sandbox-templates:shell@sha256:2f32da82c56bc660c7af142f1b235e33f96f2e7316e1151f03bb88a1927b9df6
 
 ARG HERMES_REF=main
 ARG CODEX_VERSION=0.118.0
 ARG MICRO_VERSION=2.0.14
+ARG TARGETARCH
 
 COPY docker-entrypoint.sh /usr/local/bin/hermes-entrypoint
 
@@ -37,26 +39,27 @@ RUN RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubuserc
     && git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting "${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting" \
     && sed -i 's/^plugins=(git)/plugins=(sudo history colored-man-pages zsh-autosuggestions zsh-syntax-highlighting)/' "${HOME}/.zshrc"
 
-RUN curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" \
-    | bash -s -- --skip-setup --branch "${HERMES_REF}" --dir /home/agent/hermes-agent
-
-RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+# Global CLIs are independent of HERMES_REF -- install before install.sh so this layer survives upstream main bumps.
+RUN --mount=type=cache,id=npm-${TARGETARCH},target=/home/agent/.npm,uid=1000,gid=1000 \
     NPM_CONFIG_PREFIX=/home/agent/.local npm install -g \
     @openai/codex@${CODEX_VERSION} \
     @anthropic-ai/claude-code \
     opencode-ai
 
-RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+RUN curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" \
+    | bash -s -- --skip-setup --branch "${HERMES_REF}" --dir /home/agent/hermes-agent
+
+RUN --mount=type=cache,id=npm-${TARGETARCH},target=/home/agent/.npm,uid=1000,gid=1000 \
     cd /home/agent/hermes-agent \
     && (npm audit fix >/dev/null || [ $? -eq 1 ])
 
 # Dashboard entrypoint uses `hermes dashboard --skip-build`; static UI must exist at hermes_cli/web_dist.
-RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+RUN --mount=type=cache,id=npm-${TARGETARCH},target=/home/agent/.npm,uid=1000,gid=1000 \
     cd /home/agent/hermes-agent/web \
     && npm ci \
     && npm run build
 
-RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+RUN --mount=type=cache,id=npm-${TARGETARCH},target=/home/agent/.npm,uid=1000,gid=1000 \
     cd /home/agent/hermes-agent/scripts/whatsapp-bridge \
     && (npm audit fix >/dev/null || [ $? -eq 1 ])
 

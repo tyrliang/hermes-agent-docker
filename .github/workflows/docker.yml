@@ -23,6 +23,11 @@ env:
   # Pin upstream Hermes ref for reproducible layers + better cache hits (override via workflow_dispatch).
   HERMES_REF: ${{ inputs.hermes_ref || 'main' }}
 
+# Cancel obsolete PR runs in flight; let main runs queue so we don't drop a publish.
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-amd64:
     name: build (linux/amd64)
@@ -65,12 +70,10 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          cache-from: |
-            type=gha,scope=linux-amd64
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64
-          cache-to: |
-            type=gha,scope=linux-amd64,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64,mode=max
+          # Registry-only cache: durable, no 10GB GHA cap, identical perf for native amd64/arm64 runners.
+          # Skip cache-to on PRs since we don't have packages: write to push the buildcache tag.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-amd64
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}:buildcache-amd64,mode=max', env.REGISTRY, env.IMAGE_NAME) || '' }}
 
   build-arm64:
     name: build (linux/arm64)
@@ -114,12 +117,9 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          cache-from: |
-            type=gha,scope=linux-arm64
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64
-          cache-to: |
-            type=gha,scope=linux-arm64,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64,mode=max
+          # Registry-only cache: durable, no 10GB GHA cap, identical perf for native amd64/arm64 runners.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-arm64,mode=max
 
   merge:
     name: merge manifest
@@ -166,6 +166,10 @@ jobs:
             type=raw,value=v${{ steps.version.outputs.semver }}
 
       - name: Create and push multi-arch manifest
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
         run: |
           set -euo pipefail
           tags="${{ steps.meta.outputs.tags }}"
@@ -175,7 +179,7 @@ jobs:
             [ -n "$tag" ] || continue
             args+=(-t "$tag")
           done <<< "$tags"
-          # build-push-action digest outputs are full refs (repo@sha256:...).
+          # build-push-action digest outputs are bare sha256:..., not full refs -- prefix with image to form <image>@<digest>.
           docker buildx imagetools create "${args[@]}" \
-            "${{ needs.build-amd64.outputs.digest }}" \
-            "${{ needs.build-arm64.outputs.digest }}"
+            "${IMAGE}@${AMD64_DIGEST}" \
+            "${IMAGE}@${ARM64_DIGEST}"
