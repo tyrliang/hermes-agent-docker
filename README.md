@@ -24,7 +24,7 @@ The image **ENTRYPOINT** always runs **`/usr/local/bin/hermes-entrypoint`** befo
    - Toggle dashboard with **`HERMES_ENTRYPOINT_DASHBOARD`** using the same truthy/off values as **`HERMES_ENTRYPOINT_GATEWAY`** (**`0`**, **`false`**, **`no`**, **`off`** — case insensitive; unset defaults **on**).
 4. **`exec` CMD:** runs your **CMD** after auto-start (**e.g.** **`sleep infinity`** in Compose).
 
-**Beyond the defaults:** Extra Hermes gateways (other profiles), one-off **`hermes`** commands, **`screen`**/**`tmux`** sessions, or custom wrappers are up to your **CMD** (`docker-compose` **`command:`**), **`docker compose exec`** from the host, or shell sessions — not a separate **`bootload.sh`** hook. Keep anything you store under **`$HERMES_HOME`** on the bind mount so it survives container recreation (**`.env`**, **`profiles/`**, **`logs/`**, etc.).
+**Beyond the defaults:** Extra Hermes gateways (other profiles), one-off **`hermes`** commands, **`screen`**/**`tmux`** sessions, or custom wrappers are up to your **CMD** (Compose **`command:`**), **`docker compose exec`** from the host, or shell sessions — not a separate **`bootload.sh`** hook. Keep anything you store under **`$HERMES_HOME`** on the bind mount so it survives container recreation (**`.env`**, **`profiles/`**, **`logs/`**, etc.).
 
 ## Build arguments
 
@@ -87,7 +87,9 @@ Run **`hermes setup`** inside the container once you have the mount (or populate
 
 ## Publishing (this fork)
 
-GitHub Actions (**.github/workflows/docker.yml**) builds **linux/amd64** and **linux/arm64** and pushes to **GHCR** on every push to **`main`** or **workflow_dispatch**. Pull requests build only (no GHCR publish).
+GitHub Actions (**.github/workflows/docker.yml**) builds **linux/amd64** and **linux/arm64** in **parallel on native runners** (no QEMU for arm64), merges a multi-arch manifest, and pushes to **GHCR** on every push to **`main`** or **workflow_dispatch**. Pull requests build **amd64 only** (no GHCR publish).
+
+**CI cache:** per-arch **GitHub Actions cache** (`scope=linux-amd64` / `linux-arm64`) plus **GHCR `buildcache-*` tags** so layers survive across runs. Pin **`HERMES_REF`** to a tag (not `main`) when you want stable cache keys and reproducible images — see workflow `workflow_dispatch` or set the default in **`.github/workflows/docker.yml`**.
 
 Each publish gets:
 

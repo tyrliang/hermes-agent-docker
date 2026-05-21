@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM docker/sandbox-templates:shell
 
 ARG HERMES_REF=main
@@ -39,20 +40,24 @@ RUN RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubuserc
 RUN curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" \
     | bash -s -- --skip-setup --branch "${HERMES_REF}" --dir /home/agent/hermes-agent
 
-RUN NPM_CONFIG_PREFIX=/home/agent/.local npm install -g \
+RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+    NPM_CONFIG_PREFIX=/home/agent/.local npm install -g \
     @openai/codex@${CODEX_VERSION} \
     @anthropic-ai/claude-code \
     opencode-ai
 
-RUN cd /home/agent/hermes-agent \
+RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+    cd /home/agent/hermes-agent \
     && (npm audit fix >/dev/null || [ $? -eq 1 ])
 
 # Dashboard entrypoint uses `hermes dashboard --skip-build`; static UI must exist at hermes_cli/web_dist.
-RUN cd /home/agent/hermes-agent/web \
+RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+    cd /home/agent/hermes-agent/web \
     && npm ci \
     && npm run build
 
-RUN cd /home/agent/hermes-agent/scripts/whatsapp-bridge \
+RUN --mount=type=cache,target=/home/agent/.npm,uid=1000,gid=1000 \
+    cd /home/agent/hermes-agent/scripts/whatsapp-bridge \
     && (npm audit fix >/dev/null || [ $? -eq 1 ])
 
 RUN HERMES_HOME=/home/agent/.hermes HOME=/home/agent hermes skills list >/dev/null
