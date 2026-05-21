@@ -89,6 +89,8 @@ EOF
         {$HERMES_DASHBOARD_AUTH_USER} {$HERMES_DASHBOARD_AUTH_HASH}
     }
     reverse_proxy 127.0.0.1:{$HERMES_DASHBOARD_PROXY_UPSTREAM} {
+        # Hermes validates Host against its bind (127.0.0.1) — not the public edge hostname.
+        header_up Host 127.0.0.1:{$HERMES_DASHBOARD_PROXY_UPSTREAM}
         flush_interval -1
     }
 }
