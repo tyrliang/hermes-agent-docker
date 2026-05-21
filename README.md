@@ -26,7 +26,7 @@ The image **ENTRYPOINT** always runs **`/usr/local/bin/hermes-entrypoint`** befo
 
 ### Railway (Docker image deploy)
 
-Use **`v0.0.6+`** (image includes **`CMD ["sleep","infinity"]`** and entrypoint drops from root to **`agent`** when needed).
+Use **`v0.0.7+`** (image includes **`CMD ["sleep","infinity"]`**; entrypoint runs as **root**, **`chown`s** the volume, then drops to **`agent`**).
 
 1. **Image:** `ghcr.io/<owner>/hermes-agent-docker:v0.0.6` (or newer).
 2. **Start command:** leave **empty** in Railway (use Dockerfile **`ENTRYPOINT`** + **`CMD`**). Do **not** set bare **`sleep infinity`** (skips entrypoint → no dashboard) or **`/usr/local/bin/hermes-entrypoint sleep infinity`** alone on older images (root + volume → crash).

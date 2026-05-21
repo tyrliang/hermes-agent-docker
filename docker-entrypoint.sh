@@ -17,11 +17,13 @@ HERMES_HOME=${HERMES_HOME:-/home/agent/.hermes}
 DEFAULTS_DIR=/usr/local/share/hermes-home
 SEED_MARKER="$HERMES_HOME/.docker-defaults-seeded"
 
-# Railway custom startCommand runs as root; persisted $HERMES_HOME is agent-owned.
-# Re-exec once as agent (image USER) so mkdir and Hermes state stay consistent.
+# Entrypoint runs as root (see Dockerfile). Fix volume ownership, then continue as agent.
+# Railway volumes are often root-owned after a misconfigured deploy (bare sleep as root).
 if [ "$(id -u)" -eq 0 ] && [ -z "${HERMES_ENTRYPOINT_REEXEC:-}" ] && getent passwd agent >/dev/null 2>&1; then
+  mkdir -p "$HERMES_HOME" "$HERMES_HOME/logs" 2>/dev/null || true
+  chown -R agent:agent "$HERMES_HOME" 2>/dev/null || true
   export HERMES_ENTRYPOINT_REEXEC=1
-  exec runuser -u agent -- env HERMES_ENTRYPOINT_REEXEC=1 /usr/local/bin/hermes-entrypoint "$@"
+  exec runuser -m -u agent -- env HERMES_ENTRYPOINT_REEXEC=1 /usr/local/bin/hermes-entrypoint "$@"
 fi
 
 mkdir -p "$HERMES_HOME"

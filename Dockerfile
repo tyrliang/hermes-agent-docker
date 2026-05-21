@@ -76,7 +76,8 @@ RUN mkdir -p /usr/local/share/hermes-home \
     && chown -R agent:agent /usr/local/share/hermes-home \
     && chsh -s /bin/zsh agent
 
-USER agent
+# Run entrypoint as root so it can chown a persisted volume, then drop to agent (see entrypoint).
+USER root
 WORKDIR /home/agent/.hermes/workspace
 VOLUME ["/home/agent/.hermes"]
 ENTRYPOINT ["/usr/local/bin/hermes-entrypoint"]
