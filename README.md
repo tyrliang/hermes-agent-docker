@@ -19,9 +19,9 @@ The image **ENTRYPOINT** always runs **`/usr/local/bin/hermes-entrypoint`** befo
 1. Ensures **`$HERMES_HOME`** (default **`/home/agent/.hermes`**) and **`$HERMES_HOME/logs`** exist (Hermes expects **`logs/`** for gateway rotating logs).
 2. **First boot:** if the mount is empty and **`$HERMES_HOME/.docker-defaults-seeded`** is absent, seeds the tree from **`/usr/local/share/hermes-home`** (Hermes defaults captured at image build time), then touches the marker.
 3. **Auto-start (defaults on):**
-   - **`hermes dashboard`** runs in the **background** (`--host` **`HERMES_DASHBOARD_HOST`** default **`0.0.0.0`**, **`--port`** default **`9119`**, plus **`--insecure`** + **`--no-open`** + **`--skip-build`** for unattended use). Publish **`9119`** on the container if you need the UI from the host.
+   - **`hermes dashboard`** runs in the **background**, bound to **`127.0.0.1`** and fronted by a bundled **Caddy** reverse proxy that enforces **HTTP Basic Auth**. The proxy listens on **`HERMES_DASHBOARD_HOST`** (default **`0.0.0.0`**) **:`HERMES_DASHBOARD_PORT`** (default **`9119`**); publish **`9119`** on the container to reach the UI from the host. The dashboard refuses to start unless **both** **`HERMES_DASHBOARD_AUTH_USER`** and **`HERMES_DASHBOARD_AUTH_PASS`** are set (the password is bcrypt-hashed at startup — Caddy never sees the plaintext beyond the hash). Internal upstream port is **`HERMES_DASHBOARD_INTERNAL_PORT`** (default **`9118`**, rarely needs changing).
    - **`hermes gateway run --accept-hooks`** (**default profile**) runs in the **background**. Disable with **`HERMES_ENTRYPOINT_GATEWAY=off`**.
-   - Toggle dashboard with **`HERMES_ENTRYPOINT_DASHBOARD`** using the same truthy/off values as **`HERMES_ENTRYPOINT_GATEWAY`** (**`0`**, **`false`**, **`no`**, **`off`** — case insensitive; unset defaults **on**).
+   - Toggle dashboard with **`HERMES_ENTRYPOINT_DASHBOARD`** using the same truthy/off values as **`HERMES_ENTRYPOINT_GATEWAY`** (**`0`**, **`false`**, **`no`**, **`off`** — case insensitive; unset defaults **on**). Set it to **`0`** for headless gateway-only deployments where you don't want to configure dashboard auth.
 4. **`exec` CMD:** runs your **CMD** after auto-start (**e.g.** **`sleep infinity`** in Compose).
 
 **Beyond the defaults:** Extra Hermes gateways (other profiles), one-off **`hermes`** commands, **`screen`**/**`tmux`** sessions, or custom wrappers are up to your **CMD** (Compose **`command:`**), **`docker compose exec`** from the host, or shell sessions — not a separate **`bootload.sh`** hook. Keep anything you store under **`$HERMES_HOME`** on the bind mount so it survives container recreation (**`.env`**, **`profiles/`**, **`logs/`**, etc.).
@@ -33,6 +33,7 @@ The image **ENTRYPOINT** always runs **`/usr/local/bin/hermes-entrypoint`** befo
 | `HERMES_REF`    | `main`    | Hermes Agent git branch or tag passed to **`install.sh`**. |
 | `CODEX_VERSION` | `0.118.0` | **`@openai/codex@…`** semver. |
 | `MICRO_VERSION` | `2.0.14`  | **`micro`** editor release. |
+| `CADDY_VERSION` | `2.11.3`  | **`caddy`** release bundled as the dashboard auth proxy. |
 
 ## Quick start
 

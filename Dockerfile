@@ -5,6 +5,7 @@ FROM docker/sandbox-templates:shell@sha256:2f32da82c56bc660c7af142f1b235e33f96f2
 ARG HERMES_REF=main
 ARG CODEX_VERSION=0.118.0
 ARG MICRO_VERSION=2.0.14
+ARG CADDY_VERSION=2.11.3
 ARG TARGETARCH
 
 COPY docker-entrypoint.sh /usr/local/bin/hermes-entrypoint
@@ -15,14 +16,17 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg nano zsh zip \
     && ARCH="$(dpkg --print-architecture)" \
     && case "$ARCH" in \
-         amd64) MICRO_ASSET_SUFFIX=linux64 ;; \
-         arm64) MICRO_ASSET_SUFFIX=linux-arm64 ;; \
-         *) echo "unsupported architecture for micro: $ARCH" >&2; exit 1 ;; \
+         amd64) MICRO_ASSET_SUFFIX=linux64;     CADDY_ASSET_SUFFIX=linux_amd64 ;; \
+         arm64) MICRO_ASSET_SUFFIX=linux-arm64; CADDY_ASSET_SUFFIX=linux_arm64 ;; \
+         *) echo "unsupported architecture: $ARCH" >&2; exit 1 ;; \
        esac \
     && curl -fsSL "https://github.com/zyedidia/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-${MICRO_ASSET_SUFFIX}.tar.gz" \
     | tar -xzf - -C /tmp \
     && mv "/tmp/micro-${MICRO_VERSION}/micro" /usr/local/bin/micro \
     && rm -rf "/tmp/micro-${MICRO_VERSION}" \
+    && curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_${CADDY_ASSET_SUFFIX}.tar.gz" \
+    | tar -xzf - -C /usr/local/bin caddy \
+    && chmod +x /usr/local/bin/caddy \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /home/agent/.hermes /home/agent/.local/bin \
     && chown -R agent:agent /home/agent/.hermes /home/agent/.local

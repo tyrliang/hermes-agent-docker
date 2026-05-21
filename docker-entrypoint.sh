@@ -27,14 +27,76 @@ if [ ! -e "$SEED_MARKER" ] && [ -z "$(find "$HERMES_HOME" -mindepth 1 -maxdepth 
   : > "$SEED_MARKER"
 fi
 
-# Hermes dashboard runs in background; bind address defaults to non-localhost for container access -- publish port in Compose.
+# Hermes dashboard runs in background, gated behind a Caddy reverse proxy that
+# enforces HTTP Basic Auth. The dashboard itself binds to 127.0.0.1 so it is
+# only reachable through the proxy.
 if _truthy "${HERMES_ENTRYPOINT_DASHBOARD:-1}"; then
-  HOST="${HERMES_DASHBOARD_HOST:-0.0.0.0}"
-  PORT="${HERMES_DASHBOARD_PORT:-9119}"
-  echo "[hermes-entrypoint] starting dashboard on ${HOST}:${PORT}"
+  PUBLIC_HOST="${HERMES_DASHBOARD_HOST:-0.0.0.0}"
+  PUBLIC_PORT="${HERMES_DASHBOARD_PORT:-9119}"
+  INTERNAL_PORT="${HERMES_DASHBOARD_INTERNAL_PORT:-9118}"
+  AUTH_USER="${HERMES_DASHBOARD_AUTH_USER:-}"
+  AUTH_PASS="${HERMES_DASHBOARD_AUTH_PASS:-}"
+
+  if [ -z "$AUTH_USER" ] || [ -z "$AUTH_PASS" ]; then
+    cat >&2 <<'EOF'
+[hermes-entrypoint] FATAL: dashboard auth is not configured.
+
+The dashboard exposes API keys, sessions, and gateway controls; running it on
+a network-reachable port without auth is unsafe.
+
+To start the dashboard, set BOTH of the following on the container:
+
+  HERMES_DASHBOARD_AUTH_USER=<username>
+  HERMES_DASHBOARD_AUTH_PASS=<password>
+
+To skip the dashboard entirely (e.g. headless gateway-only deployments):
+
+  HERMES_ENTRYPOINT_DASHBOARD=0
+EOF
+    exit 1
+  fi
+
+  RUN_DIR="$HERMES_HOME/.run"
+  mkdir -p "$RUN_DIR"
+  CADDYFILE="$RUN_DIR/Caddyfile"
+
+  # Caddy's own Caddyfile env-substitution ({$VAR}) is used so the bcrypt
+  # hash (which contains $2a$, $14$, etc.) is never re-interpreted by the shell.
+  cat > "$CADDYFILE" <<'EOF'
+{
+    auto_https off
+    admin off
+    persist_config off
+    log {
+        output stderr
+        format console
+        level WARN
+    }
+}
+
+:{$HERMES_DASHBOARD_PROXY_PORT} {
+    bind {$HERMES_DASHBOARD_PROXY_HOST}
+    basic_auth {
+        {$HERMES_DASHBOARD_AUTH_USER} {$HERMES_DASHBOARD_AUTH_HASH}
+    }
+    reverse_proxy 127.0.0.1:{$HERMES_DASHBOARD_PROXY_UPSTREAM} {
+        flush_interval -1
+    }
+}
+EOF
+
+  HERMES_DASHBOARD_AUTH_HASH=$(caddy hash-password --plaintext "$AUTH_PASS")
+  export HERMES_DASHBOARD_PROXY_HOST="$PUBLIC_HOST"
+  export HERMES_DASHBOARD_PROXY_PORT="$PUBLIC_PORT"
+  export HERMES_DASHBOARD_PROXY_UPSTREAM="$INTERNAL_PORT"
+  export HERMES_DASHBOARD_AUTH_USER
+  export HERMES_DASHBOARD_AUTH_HASH
+
+  echo "[hermes-entrypoint] starting dashboard on 127.0.0.1:${INTERNAL_PORT} (caddy basic-auth proxy on ${PUBLIC_HOST}:${PUBLIC_PORT}, user '${AUTH_USER}')"
   HERMES_NONINTERACTIVE="${HERMES_NONINTERACTIVE:-1}"
   export HERMES_NONINTERACTIVE
-  hermes dashboard --host "$HOST" --port "$PORT" --no-open --insecure --skip-build &
+  hermes dashboard --host 127.0.0.1 --port "$INTERNAL_PORT" --no-open --skip-build --tui &
+  caddy run --config "$CADDYFILE" --adapter caddyfile &
 fi
 
 # Default gateway: always unless disabled.
