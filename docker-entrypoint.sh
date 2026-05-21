@@ -17,6 +17,13 @@ HERMES_HOME=${HERMES_HOME:-/home/agent/.hermes}
 DEFAULTS_DIR=/usr/local/share/hermes-home
 SEED_MARKER="$HERMES_HOME/.docker-defaults-seeded"
 
+# Railway custom startCommand runs as root; persisted $HERMES_HOME is agent-owned.
+# Re-exec once as agent (image USER) so mkdir and Hermes state stay consistent.
+if [ "$(id -u)" -eq 0 ] && [ -z "${HERMES_ENTRYPOINT_REEXEC:-}" ] && getent passwd agent >/dev/null 2>&1; then
+  export HERMES_ENTRYPOINT_REEXEC=1
+  exec runuser -u agent -- env HERMES_ENTRYPOINT_REEXEC=1 /usr/local/bin/hermes-entrypoint "$@"
+fi
+
 mkdir -p "$HERMES_HOME"
 
 # Gateway / rotating file handlers expect this path; bind mounts may omit it after manual cleanup.

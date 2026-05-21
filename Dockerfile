@@ -80,3 +80,5 @@ USER agent
 WORKDIR /home/agent/.hermes/workspace
 VOLUME ["/home/agent/.hermes"]
 ENTRYPOINT ["/usr/local/bin/hermes-entrypoint"]
+# Foreground process after entrypoint auto-start; Compose/Railway should not override this.
+CMD ["sleep", "infinity"]
