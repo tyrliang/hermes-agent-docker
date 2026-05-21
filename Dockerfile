@@ -47,6 +47,11 @@ RUN NPM_CONFIG_PREFIX=/home/agent/.local npm install -g \
 RUN cd /home/agent/hermes-agent \
     && (npm audit fix >/dev/null || [ $? -eq 1 ])
 
+# Dashboard entrypoint uses `hermes dashboard --skip-build`; static UI must exist at hermes_cli/web_dist.
+RUN cd /home/agent/hermes-agent/web \
+    && npm ci \
+    && npm run build
+
 RUN cd /home/agent/hermes-agent/scripts/whatsapp-bridge \
     && (npm audit fix >/dev/null || [ $? -eq 1 ])
 

@@ -1,6 +1,6 @@
 # hermes-agent-docker
 
-Docker packaging for [Hermes Agent](https://github.com/NousResearch/hermes-agent), tuned for everyday **interactive dev** (comfortable shell, small editors, common agent CLIs) and **hands-off runs** via a writable Hermes home and an optional **`bootload/bootload.sh`** hook you keep on the host.
+Docker packaging for [Hermes Agent](https://github.com/NousResearch/hermes-agent), tuned for everyday **interactive dev** (comfortable shell, small editors, common agent CLIs) and **hands-off runs** via a writable Hermes bind mount (`$HERMES_HOME`) for persistence and configuration across container restarts.
 
 ## Image contents
 
@@ -10,29 +10,21 @@ Docker packaging for [Hermes Agent](https://github.com/NousResearch/hermes-agent
 - **Editors / utilities:** `micro`, `nano`, `ffmpeg`, `zip` (+ build-time **micro** version pin via `MICRO_VERSION`).
 - **Globally installed CLIs:** `@openai/codex`, `@anthropic-ai/claude-code`, and `opencode-ai` (`NPM_CONFIG_PREFIX=/home/agent/.local`; on `PATH`).
 - **Maintenance:** conservative `npm audit fix` passes on `hermes-agent` and `whatsapp-bridge` during build.
-- **Persistence:** declares a volume at `/home/agent/.hermes`; see below for **entrypoint seeding**, **`logs/`**, and **`bootload/`** (default hook path **`bootload/bootload.sh`**).
+- **Persistence:** declares a volume at `/home/agent/.hermes`; see below for **entrypoint seeding** and **`logs/`**.
 
 ## Entrypoint behaviour (`hermes-entrypoint`)
 
 The image **ENTRYPOINT** always runs **`/usr/local/bin/hermes-entrypoint`** before your **CMD**:
 
-1. Ensures **`$HERMES_HOME`** (default `/home/agent/.hermes`), **`$HERMES_HOME/logs`**, and **`$HERMES_HOME/bootload`** exist (Hermes expects **`logs/`**; **`bootload/`** is reserved for the hook plus any extra payloads you version next to **`bootload.sh`**).
+1. Ensures **`$HERMES_HOME`** (default **`/home/agent/.hermes`**) and **`$HERMES_HOME/logs`** exist (Hermes expects **`logs/`** for gateway rotating logs).
 2. **First boot:** if the mount is empty and **`$HERMES_HOME/.docker-defaults-seeded`** is absent, seeds the tree from **`/usr/local/share/hermes-home`** (Hermes defaults captured at image build time), then touches the marker.
-3. **`bootload` hook:** Resolves **`${HERMES_BOOTLOAD_SCRIPT:-$HERMES_HOME/bootload/bootload.sh}`**. If that path **exists and is executable**, **`exec`**s it with the same arguments as **CMD**. Otherwise **`exec`**s **CMD** as usual—so gateways, **`sleep infinity`**, **`hermes`**, etc. stay under your Compose or **`docker run`** control.
+3. **Auto-start (defaults on):**
+   - **`hermes dashboard`** runs in the **background** (`--host` **`HERMES_DASHBOARD_HOST`** default **`0.0.0.0`**, **`--port`** default **`9119`**, plus **`--insecure`** + **`--no-open`** + **`--skip-build`** for unattended use). Publish **`9119`** on the container if you need the UI from the host.
+   - **`hermes gateway run --accept-hooks`** (**default profile**) runs in the **background**. Disable with **`HERMES_ENTRYPOINT_GATEWAY=off`**.
+   - Toggle dashboard with **`HERMES_ENTRYPOINT_DASHBOARD`** using the same truthy/off values as **`HERMES_ENTRYPOINT_GATEWAY`** (**`0`**, **`false`**, **`no`**, **`off`** — case insensitive; unset defaults **on**).
+4. **`exec` CMD:** runs your **CMD** after auto-start (**e.g.** **`sleep infinity`** in Compose).
 
-Anything you want **without rebuilding the image** (multi-gateway startup, env tweaks, wrappers, sourced helpers under **`bootload/`**) lives on the **`$HERMES_HOME`** bind mount—default entry is **`bootload/bootload.sh`**.
-
-### Bootload layout (`bootload/`)
-
-Install the template **`tools/bootload.sh`** as **`$HERMES_HOME/bootload/bootload.sh`** (plus anything else under **`bootload/`** — fragments, **`source`** helpers, staged env files):
-
-```bash
-mkdir -p ./tmp/.hermes/bootload
-install -m 0755 ./tools/bootload.sh ./tmp/.hermes/bootload/bootload.sh
-# edit ./tmp/.hermes/bootload/bootload.sh (and sibling files under bootload/) as needed
-```
-
-Disable autoload by omitting **`bootload.sh`** or **`chmod -x ./tmp/.hermes/bootload/bootload.sh`** (with **`HERMES_BOOTLOAD_SCRIPT`**, point at nothing executable to fall through to plain **CMD**).
+**Beyond the defaults:** Extra Hermes gateways (other profiles), one-off **`hermes`** commands, **`screen`**/**`tmux`** sessions, or custom wrappers are up to your **CMD** (`docker-compose` **`command:`**), **`docker compose exec`** from the host, or shell sessions — not a separate **`bootload.sh`** hook. Keep anything you store under **`$HERMES_HOME`** on the bind mount so it survives container recreation (**`.env`**, **`profiles/`**, **`logs/`**, etc.).
 
 ## Build arguments
 
@@ -123,5 +115,5 @@ Because **`VERSION` is a moving tag**, each push rebuilds **`vX.Y.Z`**. Bump **`
 
 ## Related layout
 
-Compose stacks that attach **Mission Control** and share **`./tmp/.hermes`** with this image are documented in companion repos (same bind mount semantics and **`bootload/`** hook semantics apply).
+Compose stacks that attach **Mission Control** and share **`./tmp/.hermes`** with this image are documented in companion repos (same bind mount semantics apply).
 
