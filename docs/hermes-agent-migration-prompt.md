@@ -24,7 +24,7 @@ After the volume is remounted at `/home/agent` and `migrate-volume-to-home.sh` h
 ```markdown
 # Task: Complete Hermes v0.0.8 → v0.1.0 path migration under ~/.hermes
 
-You are running inside **hermes-agent-docker v0.1.0+**. The Railway/local volume now mounts at **`/home/agent`** (not `/home/agent/.hermes`). **`HERMES_HOME` is still `/home/agent/.hermes`** (`~/.hermes`). Hermes state belongs only under `~/.hermes`; user CLIs and package installs belong under **`/home/agent`** (`~/.local`, `~/.bun`, `~/.npm`, `~/.cache`), not inside `~/.hermes`.
+You are running inside **hermes-agent-docker v0.1.0+**. The Railway/local volume now mounts at **`/home/agent`** (not `/home/agent/.hermes`). **`HERMES_HOME` is still `/home/agent/.hermes`** (`~/.hermes`). Hermes state belongs only under `~/.hermes`; user CLIs and package installs belong under **`/home/agent`** (`~/.local`, `~/.bun`, `~/.npm`, `~/.cache`), not inside `~/.hermes`. **Python:** extra libraries must use **`pip install --user`** (persisted under `~/.local`); plain `pip install` without `--user` often targets **`/opt/hermes-agent/venv`** and is **not** persisted.
 
 Shared project files (second-brain, daily-ai-briefing, etc.) belong in **`/home/agent/workspace`** (Docker `WORKDIR`), not `~/.hermes/workspace`.
 
@@ -66,7 +66,8 @@ Work as user **`agent`** (`su - agent` if you are root). Do not modify **`/opt/h
 | Shared projects | `~/.hermes/workspace/...` | **`~/workspace/...`** (`/home/agent/workspace`) |
 | Hermes app + venv | `/opt/hermes`, `/home/agent/hermes-agent` | **`/opt/hermes-agent`** (image only) |
 | Hermes CLI | `/opt/hermes/.venv/bin/python3 /opt/hermes/hermes` | **`hermes`** on PATH → `/usr/local/bin/hermes` |
-| User pip/npm globals | `~/.hermes/bin`, `~/.hermes/lib`, `~/.hermes/site-packages` | **`~/.local/bin`**, **`~/.local/lib`** |
+| User pip/npm globals | `~/.hermes/bin`, `~/.hermes/lib`, `~/.hermes/site-packages` | **`~/.local/bin`**, **`~/.local/lib/python*/site-packages`** |
+| Extra Python libraries (agent-added) | `pip install` into `/opt/hermes-agent/venv` or `~/.hermes` | **`pip install --user`** → `~/.local` (persisted on volume); skill-specific → venv under **`~/.hermes/venvs/`** or skill tree |
 | npm prefix | under `~/.hermes` | **`NPM_CONFIG_PREFIX=~/.local`** |
 | Bun | under `~/.hermes` | **`~/.bun`** |
 | Profiles | `/opt/data/profiles/...` | **`~/.hermes/profiles/...`** |
@@ -78,6 +79,26 @@ Work as user **`agent`** (`su - agent` if you are root). Do not modify **`/opt/h
 
 Expected PATH (from profile):  
 `~/.local/bin` → `~/.bun/bin` → `/opt/hermes-agent/venv/bin` → `/usr/local/bin` → system paths.
+
+### Python packages (read before reinstalling or adding libs)
+
+The image does **not** set `PIP_USER` or redirect `pip` automatically. **`/home/agent` is on the volume**, but only installs that land under `$HOME` (or `~/.hermes` skill venvs) survive redeploys.
+
+| Command / target | Persists? |
+|------------------|-----------|
+| `pip install --user <pkg>` or `python3 -m pip install --user <pkg>` | **Yes** → `~/.local/lib/python*/site-packages`, scripts in `~/.local/bin` |
+| `pip install <pkg>` (no flag) when `pip` is `/opt/hermes-agent/venv/bin/pip` | **No** → baked Hermes venv (lost on image rebuild) |
+| `pip install` as root into system Python | **No** |
+| Skill/project venv under `~/.hermes/venvs/` or `~/.hermes/skills/...` | **Yes** (Hermes state on volume) |
+| `uv pip install --python /opt/hermes-agent/venv/bin/python ...` | **No** (same as venv pip) |
+
+**Rules for this migration and future installs:**
+
+1. Never `pip install` into **`/opt/hermes-agent`** or modify the image venv.
+2. For general agent dependencies after migration: **`pip install --user <package>`** only.
+3. For a single skill: prefer an isolated venv under **`~/.hermes`** (document path in `migration-notes.txt`).
+4. After moving pip artifacts out of `~/.hermes` (Phase 2), verify imports:  
+   `python3 -c "import <pkg>"` and `python3 -m site --user-site` (must be under `/home/agent/.local/...`).
 
 ---
 
@@ -140,8 +161,19 @@ Append a summary of every file changed to **`~/.hermes/migration-notes.txt`**.
 
 Anything that lived only in the **old container layer** (not on the volume) must be reinstalled into the new layout. Create **`~/.hermes/migration-reinstall.txt`** listing:
 - packages/tools you cannot find under `~/.local/bin`, `~/.bun/bin`, or `/usr/local/bin`
-- commands to run, e.g. `pip install --user <pkg>`, `npm install -g <pkg>`, `uv tool install ...`
+- **Python:** one line per package — `pip install --user <pkg>` (never bare `pip install <pkg>` unless targeting a documented skill venv under `~/.hermes`)
+- **Node:** `npm install -g <pkg>` (prefix is `~/.local` via `NPM_CONFIG_PREFIX`)
+- other CLIs: `uv tool install ...`, etc.
 - whether `agent-browser install` is needed (only if `~/.hermes/.agent-browser` is missing)
+
+Before adding reinstall commands, inventory what was only in the old image venv (not on volume):
+
+```bash
+# Where pip points (venv pip = ephemeral target)
+which pip python3 2>/dev/null
+pip list 2>/dev/null | head -20
+ls -la ~/.local/lib/python*/site-packages 2>/dev/null | head -5
+```
 
 Do **not** reinstall Hermes itself into the volume.
 
@@ -162,6 +194,9 @@ ls -la ~/.hermes/state.db ~/.hermes/.env ~/.hermes/gateway.pid 2>/dev/null || tr
 ls -la ~/workspace 2>/dev/null | head -10
 grep -rE '/opt/hermes[^-]|/home/agent/hermes-agent|/opt/data/|\.hermes/workspace' ~/.hermes \
   --include='*.yaml' --include='*.json' --include='*.sh' --include='*.env' 2>/dev/null | head -30 || echo "No stale paths found"
+python3 -m site --user-site
+# Optional persistence smoke test after reinstalling a user package:
+# pip install --user cowsay && ~/.local/bin/cowsay hello
 ```
 
 Success criteria:
@@ -171,6 +206,8 @@ Success criteria:
 - `hermes doctor` passes
 - Cron jobs show sensible `workdir` under `workspace` or `.hermes`
 - User tools expected in `~/.local/bin`, not `~/.hermes/bin`
+- `python3 -m site --user-site` reports a path under **`/home/agent/.local/`** (not `/opt/hermes-agent/venv/...`)
+- Any reinstalled Python packages use **`pip install --user`** (documented in `migration-reinstall.txt`)
 
 Report: files moved, files edited, reinstall commands, validation results, and anything requiring operator restart (gateway/dashboard).
 ```
