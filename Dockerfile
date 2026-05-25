@@ -140,6 +140,14 @@ RUN printf '%s\n' \
        > /etc/profile.d/hermes-agent.sh \
     && chmod 644 /etc/profile.d/hermes-agent.sh
 
+# .pth bridge so the venv's Python imports packages under /home/agent/.local/lib/ (volume).
+RUN venv_site=$(/opt/hermes-agent/venv/bin/python -c 'import site; print(site.getsitepackages()[0])') && \
+    pyver=$(/opt/hermes-agent/venv/bin/python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")') && \
+    mkdir -p "$venv_site" && \
+    printf '%s\n' "/home/agent/.local/lib/python${pyver}/site-packages" \
+      > "$venv_site/hermes-user-local.pth" && \
+    chown agent:agent "$venv_site/hermes-user-local.pth"
+
 ENV HERMES_HOME=/home/agent/.hermes
 ENV NPM_CONFIG_PREFIX=/home/agent/.local
 ENV BUN_INSTALL=/home/agent/.bun
