@@ -36,6 +36,21 @@ agent_pip_ensure_bridge() {
   mkdir -p "$target" "$scripts"
   venv_site=$("$HERMES_PY" -c 'import site; print(site.getsitepackages()[0])') || return 1
   pth="${venv_site}/${AGENT_PIP_PTH_NAME}"
+
+  # Entrypoint may create this as root; agent-pip must be able to refresh it.
+  if [ -f "$pth" ] && [ ! -w "$pth" ]; then
+    current=$(tr -d '\n' <"$pth" 2>/dev/null || true)
+    if [ "$current" = "$target" ]; then
+      printf '[agent-pip] volume site-packages: %s\n' "$target" >&2
+      return 0
+    fi
+    printf '[agent-pip] WARN: %s not writable (stale bridge); redeploy v0.1.2+ image or: sudo chown agent:agent %s\n' "$pth" "$pth" >&2
+    return 1
+  fi
+
   printf '%s\n' "$target" >"$pth"
+  if [ "$(id -u)" -eq 0 ] && getent passwd agent >/dev/null 2>&1; then
+    chown agent:agent "$pth" 2>/dev/null || true
+  fi
   printf '[agent-pip] volume site-packages: %s\n' "$target" >&2
 }

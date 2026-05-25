@@ -26,7 +26,7 @@ You run as user **`agent`** with **`HOME=/home/agent`** and **`HERMES_HOME=/home
 |-----------|------------------------------------------|--------------------------------------------------|
 | **Python** | `agent-pip install <pkg>` | `cd ~/workspace/<project> && python -m venv .venv && .venv/bin/pip install <pkg>` |
 | **npm** | `npm install -g <pkg>` | `cd ~/workspace/<project> && npm install` |
-| **Bun** | `bun install -g <pkg>` (requires `bun` on PATH) | `cd ~/workspace/<project> && bun install` |
+| **Bun** | `bun install -g <pkg>` (**Bun is not pre-installed** — install first; see §3) | `cd ~/workspace/<project> && bun install` |
 | **uv (Python CLI tools)** | `uv tool install <tool>` | `uv pip install --python .venv/bin/python <pkg>` in project dir |
 | **Other CLIs** | `uv tool install <name>` if available; else document manual install in `~/.hermes/migration-reinstall.txt` | project README |
 
@@ -56,6 +56,7 @@ NPM_CONFIG_PREFIX=/home/agent/.local
 npm_config_cache=/home/agent/.npm
 BUN_INSTALL=/home/agent/.bun
 XDG_CACHE_HOME=/home/agent/.cache
+XDG_DATA_HOME=/home/agent/.local/share
 PATH=~/.local/bin:~/.bun/bin:/opt/hermes-agent/venv/bin:/usr/local/bin:...
 ```
 
@@ -73,8 +74,10 @@ agent-pip uninstall <package>   # if supported for --target installs
 ```
 
 - **Lands on volume:** `~/.local/lib/pythonX.Y/site-packages` (X.Y = Hermes venv version)
-- **Scripts:** `~/.local/bin`
-- **Hermes visibility:** entrypoint writes `hermes-user-local.pth` in the Hermes venv each boot
+- **Scripts:** `~/.local/bin` (console scripts from `--target` installs may be limited; prefer `python -m <module>` when needed)
+- **Hermes visibility:** entrypoint writes `hermes-user-local.pth` under `/opt/hermes-agent/venv/lib/pythonX.Y/site-packages/` each boot (`.pth` bridge)
+
+**`.pth` bridge ownership:** v0.1.2+ images `chown` the bridge file to `agent` when the entrypoint creates it, so `agent-pip install` does not need a manual `sudo chown`. On older builds, if `agent-pip` reports permission denied on `hermes-user-local.pth`, run once: `sudo chown agent:agent /opt/hermes-agent/venv/lib/python*/site-packages/hermes-user-local.pth`
 
 **Verify:**
 
@@ -139,9 +142,9 @@ npm ci
 
 ## 3. Bun
 
-`BUN_INSTALL` defaults to **`~/.bun`** (on the volume).
+**Bun is not pre-installed** in the image. `BUN_INSTALL` defaults to **`~/.bun`** (on the volume) once you install Bun.
 
-### Install Bun (if `bun` is not on PATH)
+### Install Bun (one-time, if `bun` is not on PATH)
 
 ```bash
 # One-time — pick upstream install method; then:
@@ -200,7 +203,7 @@ That targets the **image** venv (ephemeral). Use **`agent-pip install`** instead
 
 ---
 
-## 5. Other runtimes & tools
+## 5. Other runtimes and tools
 
 | Tool | Global (volume) approach | Notes |
 |------|--------------------------|-------|
