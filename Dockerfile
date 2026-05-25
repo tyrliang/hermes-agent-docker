@@ -34,12 +34,15 @@ RUN apt-get update \
     && mkdir -p /home/agent/.hermes \
     && chown -R agent:agent /home/agent/.hermes
 
-# Baked npm CLIs — system prefix so a fresh /home/agent volume does not hide them.
+# Baked npm CLIs — force /usr/local (base image defaults to /usr/local/share/npm-global).
 RUN --mount=type=cache,id=npm-${TARGETARCH},target=/var/cache/npm \
-    npm install -g \
+    NPM_CONFIG_PREFIX=/usr/local npm install -g \
     @openai/codex@${CODEX_VERSION} \
     @anthropic-ai/claude-code \
-    opencode-ai
+    opencode-ai \
+    && test -x /usr/local/bin/claude \
+    && test -x /usr/local/bin/codex \
+    && test -x /usr/local/bin/opencode
 
 # uv installs Python under $HOME/.local by default; root's /root is 700 so agent cannot exec the venv.
 ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python
