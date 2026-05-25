@@ -13,17 +13,52 @@ _truthy() {
   esac
 }
 
+AGENT_HOME=/home/agent
 HERMES_HOME=${HERMES_HOME:-/home/agent/.hermes}
 DEFAULTS_DIR=/usr/local/share/hermes-home
+HOME_SEED_DIR=/usr/local/share/agent-home-seed
 SEED_MARKER="$HERMES_HOME/.docker-defaults-seeded"
+HOME_SEED_MARKER="$AGENT_HOME/.docker-home-seeded"
+
+_agent_path() {
+  printf '%s' "${AGENT_HOME}/.local/bin:${AGENT_HOME}/.bun/bin:/opt/hermes-agent/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+}
+
+_agent_env_exports() {
+  printf '%s\n' \
+    "HOME=${AGENT_HOME}" \
+    "HERMES_HOME=${HERMES_HOME}" \
+    "NPM_CONFIG_PREFIX=${NPM_CONFIG_PREFIX:-${AGENT_HOME}/.local}" \
+    "npm_config_cache=${npm_config_cache:-${AGENT_HOME}/.npm}" \
+    "BUN_INSTALL=${BUN_INSTALL:-${AGENT_HOME}/.bun}" \
+    "XDG_CACHE_HOME=${XDG_CACHE_HOME:-${AGENT_HOME}/.cache}" \
+    "XDG_DATA_HOME=${XDG_DATA_HOME:-${AGENT_HOME}/.local/share}" \
+    "PATH=$(_agent_path)"
+}
+
+# Old Railway mount put Hermes state at the volume root; v0.1.0+ mounts the volume at /home/agent.
+_flat_volume_pending_migration() {
+  if [ -f "$HERMES_HOME/config.yaml" ] || [ -f "$HERMES_HOME/.env" ] || [ -f "$HERMES_HOME/state.db" ]; then
+    return 1
+  fi
+  if [ -f "$AGENT_HOME/config.yaml" ] || [ -f "$AGENT_HOME/.env" ] || [ -f "$AGENT_HOME/state.db" ]; then
+    return 0
+  fi
+  return 1
+}
 
 # Entrypoint runs as root (see Dockerfile). Fix volume ownership, then continue as agent.
 # Railway volumes are often root-owned after a misconfigured deploy (bare sleep as root).
 if [ "$(id -u)" -eq 0 ] && [ -z "${HERMES_ENTRYPOINT_REEXEC:-}" ] && getent passwd agent >/dev/null 2>&1; then
-  mkdir -p "$HERMES_HOME" "$HERMES_HOME/logs" 2>/dev/null || true
-  chown -R agent:agent "$HERMES_HOME" 2>/dev/null || true
+  mkdir -p "$AGENT_HOME/.hermes/logs" "$AGENT_HOME/.local/bin" "$AGENT_HOME/workspace" 2>/dev/null || true
+  chown -R agent:agent "$AGENT_HOME" 2>/dev/null || true
+
   export HERMES_ENTRYPOINT_REEXEC=1
-  exec runuser -m -u agent -- env HERMES_ENTRYPOINT_REEXEC=1 /usr/local/bin/hermes-entrypoint "$@"
+  # shellcheck disable=SC2046
+  exec runuser -m -u agent -- env \
+    HERMES_ENTRYPOINT_REEXEC=1 \
+    $(_agent_env_exports) \
+    /usr/local/bin/hermes-entrypoint "$@"
 fi
 
 mkdir -p "$HERMES_HOME"
@@ -31,15 +66,37 @@ mkdir -p "$HERMES_HOME"
 # Gateway / rotating file handlers expect this path; bind mounts may omit it after manual cleanup.
 mkdir -p "$HERMES_HOME/logs"
 
-if [ ! -e "$SEED_MARKER" ] && [ -z "$(find "$HERMES_HOME" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
-  cp -a "$DEFAULTS_DIR"/. "$HERMES_HOME"/
-  : > "$SEED_MARKER"
+if _flat_volume_pending_migration; then
+  cat >&2 <<'EOF'
+[hermes-entrypoint] Legacy flat volume detected (Hermes state at /home/agent/ root).
+
+Gateway and dashboard are paused until you restructure the volume. From Railway SSH:
+
+  migrate-volume-to-home.sh /home/agent
+  # or: bash /usr/local/bin/migrate-volume-to-home.sh /home/agent
+
+Then restart the service. See docs/railway-home-volume-migration.md
+
+EOF
+else
+  if [ ! -e "$SEED_MARKER" ] && [ -z "$(find "$HERMES_HOME" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    cp -a "$DEFAULTS_DIR"/. "$HERMES_HOME"/
+    : > "$SEED_MARKER"
+  fi
+fi
+
+# First boot on a fresh /home/agent volume: seed zsh skeleton from image (not on volume).
+if [ ! -e "$HOME_SEED_MARKER" ] && [ ! -e "$AGENT_HOME/.zshrc" ] && [ -d "$HOME_SEED_DIR" ]; then
+  cp -a "$HOME_SEED_DIR"/. "$AGENT_HOME"/
+  : > "$HOME_SEED_MARKER"
 fi
 
 # Hermes dashboard runs in background, gated behind a Caddy reverse proxy that
 # enforces HTTP Basic Auth. The dashboard itself binds to 127.0.0.1 so it is
 # only reachable through the proxy.
-if _truthy "${HERMES_ENTRYPOINT_DASHBOARD:-1}"; then
+if _flat_volume_pending_migration; then
+  : # wait for migrate-volume-to-home.sh before starting Hermes services
+elif _truthy "${HERMES_ENTRYPOINT_DASHBOARD:-1}"; then
   PUBLIC_HOST="${HERMES_DASHBOARD_HOST:-0.0.0.0}"
   PUBLIC_PORT="${HERMES_DASHBOARD_PORT:-9119}"
   INTERNAL_PORT="${HERMES_DASHBOARD_INTERNAL_PORT:-9118}"
@@ -111,7 +168,9 @@ EOF
 fi
 
 # Default gateway: always unless disabled.
-if _truthy "${HERMES_ENTRYPOINT_GATEWAY:-1}"; then
+if _flat_volume_pending_migration; then
+  :
+elif _truthy "${HERMES_ENTRYPOINT_GATEWAY:-1}"; then
   echo '[hermes-entrypoint] starting default gateway (background)'
   HERMES_NONINTERACTIVE="${HERMES_NONINTERACTIVE:-1}"
   export HERMES_NONINTERACTIVE
