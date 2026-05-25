@@ -10,6 +10,8 @@ ARG TARGETARCH
 
 COPY docker-entrypoint.sh /usr/local/bin/hermes-entrypoint
 COPY scripts/migrate-volume-to-home.sh /usr/local/bin/migrate-volume-to-home.sh
+COPY scripts/agent-pip-common.sh /usr/local/lib/hermes-agent/agent-pip-common.sh
+COPY scripts/agent-pip.sh /usr/local/bin/agent-pip
 
 USER root
 
@@ -94,7 +96,8 @@ RUN runuser -u agent -- env HOME=/home/agent HERMES_HOME=/home/agent/.hermes /us
 
 RUN mkdir -p /usr/local/share/hermes-home \
     && cp -a /home/agent/.hermes/. /usr/local/share/hermes-home/ \
-    && chmod 755 /usr/local/bin/hermes-entrypoint /usr/local/bin/migrate-volume-to-home.sh \
+    && chmod 755 /usr/local/bin/hermes-entrypoint /usr/local/bin/migrate-volume-to-home.sh /usr/local/bin/agent-pip \
+    && chmod 644 /usr/local/lib/hermes-agent/agent-pip-common.sh \
     && chown -R agent:agent /usr/local/share/hermes-home \
     && chsh -s /bin/zsh agent
 

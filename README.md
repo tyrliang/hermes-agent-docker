@@ -4,6 +4,8 @@ Docker packaging for [Hermes Agent](https://github.com/NousResearch/hermes-agent
 
 ## Image layout (v0.1.0+)
 
+**Upgrading v0.1.0 → v0.1.1:** see [docs/v0.1.0-to-v0.1.1-migration.md](docs/v0.1.0-to-v0.1.1-migration.md) (`agent-pip` for persistent Python libs).
+
 Three persistence layers:
 
 | Layer | Contents | Location |
@@ -29,9 +31,12 @@ Immutable software lives **outside** `/home/agent` so a fresh Railway volume doe
 | Purpose | Location |
 |---------|----------|
 | Hermes config, sessions, cron, skills | `$HERMES_HOME` (`~/.hermes`) |
-| User CLIs (`pip install --user`, `npm install -g`) | `~/.local` |
+| User Python libs (`agent-pip install`) | `~/.local/lib/pythonX.Y/site-packages` (+ `~/.local/bin` scripts) |
+| User CLIs (`npm install -g`) | `~/.local` |
 | Bun | `~/.bun` |
 | Baked Hermes / CLIs | `/opt/hermes-agent`, `/usr/local/bin` (image only) |
+
+**Cheatsheet for agents:** [docs/agent-package-install-cheatsheet.md](docs/agent-package-install-cheatsheet.md) — which command to use for Python, npm, Bun, uv, etc.
 
 ## Entrypoint behaviour (`hermes-entrypoint`)
 
@@ -48,7 +53,7 @@ The image **ENTRYPOINT** always runs **`/usr/local/bin/hermes-entrypoint`** befo
 
 ### Railway (Docker image deploy)
 
-Use **`v0.1.0+`** for home-volume persistence.
+Use **`v0.1.1+`** (or **`v0.1.0+`**) for home-volume persistence.
 
 1. **Image:** `ghcr.io/<owner>/hermes-agent-docker:v0.1.0` (or newer).
 2. **Start command:** leave **empty** (use Dockerfile **`ENTRYPOINT`** + **`CMD`**).
@@ -57,6 +62,8 @@ Use **`v0.1.0+`** for home-volume persistence.
 5. **Volume:** mount at **`/home/agent`** (`RAILWAY_VOLUME_MOUNT_PATH=/home/agent`).
 
 **Upgrading from v0.0.x:** deploy **v0.1.0+**, remount the same volume at **`/home/agent`**, then run **`migrate-volume-to-home.sh /home/agent`** via Railway SSH and restart. See [docs/railway-home-volume-migration.md](docs/railway-home-volume-migration.md).
+
+**Upgrading from v0.1.0:** deploy **v0.1.1+**, then reinstall extra Python packages with **`agent-pip install`**. See [docs/v0.1.0-to-v0.1.1-migration.md](docs/v0.1.0-to-v0.1.1-migration.md).
 
 ### Railway SSH
 
@@ -102,6 +109,7 @@ docker run --rm \
 
 - **`HERMES_HOME`** defaults to **`/home/agent/.hermes`** (inside the volume).
 - Mount **`/home/agent`** so runtime installs under **`~/.local`**, **`~/.bun`**, etc. survive redeploys.
+- **Python extras:** `agent-pip install <package>` (not bare `pip install` — see v0.1.1 migration guide).
 - Run **`hermes setup`** once on a fresh volume (or restore from backup).
 
 ## Publishing (this fork)

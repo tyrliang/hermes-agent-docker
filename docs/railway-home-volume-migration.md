@@ -140,7 +140,7 @@ Functional checks:
 - Dashboard on port **9119** (with `HERMES_DASHBOARD_AUTH_USER` / `HERMES_DASHBOARD_AUTH_PASS`)
 - Gateway running; `~/.hermes/gateway.pid` present
 - Telegram / cron / hooks if used
-- **Persistence test:** `pip install --user cowsay` or `npm install -g cowsay`, restart container, confirm binary in `~/.local/bin`
+- **Persistence test:** `agent-pip install cowsay` (v0.1.1+) or `npm install -g cowsay`, restart container, confirm import / `~/.local/bin`
 
 ---
 
@@ -241,7 +241,8 @@ docker compose ... -v ./tmp/agent-home:/home/agent
 | Purpose | Location |
 |---------|----------|
 | Hermes config, sessions, cron, skills | `$HERMES_HOME` (`~/.hermes`) |
-| User CLIs (`pip install --user`, `npm install -g` with default prefix) | `~/.local` |
+| User Python (`agent-pip install`, v0.1.1+) | `~/.local/lib/python*/site-packages` |
+| User CLIs (`npm install -g` with default prefix) | `~/.local` |
 | Bun | `~/.bun` |
 | Caches | `~/.cache`, `~/.npm` |
 | Baked Hermes app | `/opt/hermes-agent` (image — do not modify) |

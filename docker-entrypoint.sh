@@ -15,6 +15,8 @@ _truthy() {
 
 AGENT_HOME=/home/agent
 HERMES_HOME=${HERMES_HOME:-/home/agent/.hermes}
+# shellcheck source=agent-pip-common.sh
+. /usr/local/lib/hermes-agent/agent-pip-common.sh 2>/dev/null || true
 DEFAULTS_DIR=/usr/local/share/hermes-home
 HOME_SEED_DIR=/usr/local/share/agent-home-seed
 SEED_MARKER="$HERMES_HOME/.docker-defaults-seeded"
@@ -51,6 +53,9 @@ _flat_volume_pending_migration() {
 # Railway volumes are often root-owned after a misconfigured deploy (bare sleep as root).
 if [ "$(id -u)" -eq 0 ] && [ -z "${HERMES_ENTRYPOINT_REEXEC:-}" ] && getent passwd agent >/dev/null 2>&1; then
   mkdir -p "$AGENT_HOME/.hermes/logs" "$AGENT_HOME/.local/bin" "$AGENT_HOME/workspace" 2>/dev/null || true
+  if command -v agent_pip_ensure_bridge >/dev/null 2>&1; then
+    agent_pip_ensure_bridge "$AGENT_HOME" || true
+  fi
   chown -R agent:agent "$AGENT_HOME" 2>/dev/null || true
 
   export HERMES_ENTRYPOINT_REEXEC=1
@@ -65,6 +70,10 @@ mkdir -p "$HERMES_HOME"
 
 # Gateway / rotating file handlers expect this path; bind mounts may omit it after manual cleanup.
 mkdir -p "$HERMES_HOME/logs"
+
+if command -v agent_pip_ensure_bridge >/dev/null 2>&1; then
+  agent_pip_ensure_bridge "$AGENT_HOME" || true
+fi
 
 if _flat_volume_pending_migration; then
   cat >&2 <<'EOF'
