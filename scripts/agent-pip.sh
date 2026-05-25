@@ -7,8 +7,8 @@ HOME="${HOME:-/home/agent}"
 # shellcheck source=agent-pip-common.sh
 . /usr/local/lib/hermes-agent/agent-pip-common.sh
 
-if [ ! -x "$HERMES_PY" ] || [ ! -x "$HERMES_PIP" ]; then
-  printf 'agent-pip: Hermes venv not found under /opt/hermes-agent\n' >&2
+if [ ! -x "$HERMES_PY" ] || ! "$HERMES_PY" -m pip --version >/dev/null 2>&1; then
+  printf 'agent-pip: Hermes venv or pip not available under /opt/hermes-agent\n' >&2
   exit 1
 fi
 
@@ -24,10 +24,8 @@ agent_pip_ensure_bridge "$HOME" >/dev/null
 case "${1:-}" in
   install | download | wheel)
     printf 'agent-pip: target %s\n' "$TARGET" >&2
+    set -- "$1" --target="$TARGET" "${@:2}"
     ;;
 esac
 
-exec "$HERMES_PIP" \
-  --target="$TARGET" \
-  --install-scripts="$SCRIPTS" \
-  "$@"
+exec "$HERMES_PY" -m pip "$@"

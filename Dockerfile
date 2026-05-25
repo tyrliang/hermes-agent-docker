@@ -52,6 +52,10 @@ RUN HERMES_HOME=/home/agent/.hermes HOME=/home/agent \
     curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" \
     | bash -s -- --skip-setup --branch "${HERMES_REF}" --dir /opt/hermes-agent
 
+# Hermes/uv venv may not include pip; agent-pip uses `python -m pip`.
+RUN uv pip install --python /opt/hermes-agent/venv/bin/python pip \
+    && /opt/hermes-agent/venv/bin/python -m pip --version >/dev/null
+
 # Local STT (HERMES_STT_PROVIDER=local); ffmpeg is installed above.
 RUN uv pip install --python /opt/hermes-agent/venv/bin/python faster-whisper==1.2.1
 
